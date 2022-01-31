@@ -74,6 +74,7 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
         out = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(
             'M', 'J', 'P', 'G'), fps, (width, height))
 
+
     while cap.isOpened():
         ret, image_np = cap.read()
         if not ret:
@@ -84,6 +85,7 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
 
         status = "Waiting"
         rects = []
+        myLabels = []
 
         if total_frames % skip_frames == 0:
             status = "Detecting"
@@ -99,6 +101,9 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
                         int(x_min * width), int(y_min * height), int(x_max * width), int(y_max * height))
                     tracker.start_track(rgb, rect)
                     trackers.append(tracker)
+                    myLabels.append(category_index[output_dict['detection_classes'][i]]['name'])
+                    print("detection: ")
+                    print(type(tracker))
         else:
             status = "Tracking"
             for tracker in trackers:
@@ -112,11 +117,15 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
 
                 # add the bounding box coordinates to the rectangles list
                 rects.append((x_min, y_min, x_max, y_max))
+                print("tracking: ")
+                print(type(tracker))
 
         objects = ct.update(rects)
 
         for (objectID, centroid) in objects.items():
             to = trackableObjects.get(objectID, None)
+            print("to: ")
+            print(type(to))
 
             if to is None:
                 to = TrackableObject(objectID, centroid)
