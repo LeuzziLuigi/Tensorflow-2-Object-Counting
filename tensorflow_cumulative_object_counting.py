@@ -58,7 +58,7 @@ def run_inference_for_single_image(model, image):
     return output_dict
 
 
-def run_inference(model, category_index, cap, labels, roi_position=0.6, threshold=0.5, x_axis=True, skip_frames=20, save_path='', show=True):
+def run_inference(model, category_index, cap, labels, roi_position=0.6, threshold=0.5, x_axis=True, skip_frames=20, save_path='', show=True):  
     counter = [0, 0, 0, 0]  # left, right, up, down
     total_frames = 0
 
@@ -74,7 +74,6 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
         out = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(
             'M', 'J', 'P', 'G'), fps, (width, height))
 
-
     while cap.isOpened():
         ret, image_np = cap.read()
         if not ret:
@@ -85,11 +84,12 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
 
         status = "Waiting"
         rects = []
-        myLabels = []
+        classes = []
 
         if total_frames % skip_frames == 0:
             status = "Detecting"
-            trackers = []
+            trackers = [] # [ {tracker: dlibTracerCorObject, label: 'truck'},
+                          #   {tracker: dlibTrackerC..., label: 'car'} ]
 
             # Actual detection.
             output_dict = run_inference_for_single_image(model, image_np)
@@ -100,13 +100,12 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
                     rect = dlib.rectangle(
                         int(x_min * width), int(y_min * height), int(x_max * width), int(y_max * height))
                     tracker.start_track(rgb, rect)
-                    trackers.append(tracker)
-                    myLabels.append(category_index[output_dict['detection_classes'][i]]['name'])
-                    print("detection: ")
-                    print(type(tracker))
+                    trackers.append({'tracker': tracker, 'label': category_index[output_dict['detection_classes'][i]]['id']})
         else:
             status = "Tracking"
-            for tracker in trackers:
+            for obj in trackers:
+                tracker = obj['tracker']
+                label = obj['label']
                 # update the tracker and grab the updated position
                 tracker.update(rgb)
                 pos = tracker.get_position()
@@ -117,16 +116,13 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
 
                 # add the bounding box coordinates to the rectangles list
                 rects.append((x_min, y_min, x_max, y_max))
-                print("tracking: ")
-                print(type(tracker))
+                classes.append(label)
 
-        objects = ct.update(rects)
+        #pass the label in the update so that it stays the same as objects and not rects
+        objects = ct.update(rects, classes)
 
         for (objectID, centroid) in objects.items():
             to = trackableObjects.get(objectID, None)
-            print("to: ")
-            print(type(to))
-
             if to is None:
                 to = TrackableObject(objectID, centroid)
             else:
@@ -137,9 +133,11 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
                     if centroid[0] > roi_position*width and direction > 0 and np.mean(x) < args.roi_position*width:
                         counter[1] += 1
                         to.counted = True
+                        print("class: " + category_index[centroid[2]]["name"] + "\ndirection: right")
                     elif centroid[0] < roi_position*width and direction < 0 and np.mean(x) > args.roi_position*width:
                         counter[0] += 1
                         to.counted = True
+                        print("class: " + category_index[centroid[2]]["name"] + "\ndirection: left")
 
                 elif not x_axis and not to.counted:
                     y = [c[1] for c in to.centroids]
@@ -148,9 +146,11 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
                     if centroid[1] > roi_position*height and direction > 0 and np.mean(y) < args.roi_position*height:
                         counter[3] += 1
                         to.counted = True
+                        print("class: " + category_index[centroid[2]]["name"] + "\ndirection: down")
                     elif centroid[1] < roi_position*height and direction < 0 and np.mean(y) > args.roi_position*height:
                         counter[2] += 1
                         to.counted = True
+                        print("class: " + category_index[centroid[2]]["name"] + "\ndirection: up")
 
                 to.centroids.append(centroid)
 
@@ -174,12 +174,12 @@ def run_inference(model, category_index, cap, labels, roi_position=0.6, threshol
         font = cv2.FONT_HERSHEY_SIMPLEX
         if x_axis:
             cv2.putText(image_np, f'Left: {counter[0]}; Right: {counter[1]}', (
-                10, 35), font, 0.8, (0, 0xFF, 0xFF), 2, cv2.FONT_HERSHEY_SIMPLEX)
+                10, 200), font, 0.8, (0, 0, 0), 2, cv2.FONT_HERSHEY_SIMPLEX)
         else:
             cv2.putText(image_np, f'Up: {counter[2]}; Down: {counter[3]}', (
-                10, 35), font, 0.8, (0, 0xFF, 0xFF), 2, cv2.FONT_HERSHEY_SIMPLEX)
-        cv2.putText(image_np, 'Status: ' + status, (10, 70), font,
-                    0.8, (0, 0xFF, 0xFF), 2, cv2.FONT_HERSHEY_SIMPLEX)
+                10, 200), font, 0.8, (0, 0xFF, 0xFF), 2, cv2.FONT_HERSHEY_SIMPLEX)
+        cv2.putText(image_np, 'Status: ' + status, (10, 235), font,
+                    0.8, (0, 0, 0), 2, cv2.FONT_HERSHEY_SIMPLEX)
 
         if show:
             cv2.imshow('cumulative_object_counting', image_np)
